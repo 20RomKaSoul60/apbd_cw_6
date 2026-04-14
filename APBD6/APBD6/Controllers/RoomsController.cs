@@ -34,9 +34,7 @@ namespace APBD6.Controllers
         public ActionResult<Room> getByBuildingCode(int buildingCode)
         {
             var room = DB.Rooms.Where(r =>
-                r.Value.BuildingCode == buildingCode &&
-                r.Value.Capacity >= 20 && r.Value.IsActive == true &&
-                r.Value.HasProjector == true).First();
+                r.Value.BuildingCode == buildingCode).First();
 
             if (room.Value == null)
             {
@@ -45,6 +43,22 @@ namespace APBD6.Controllers
             return Ok(room);
 
         }
+
+        [HttpGet("?minCapacity = 20 & hasProjector=true & activeOnly=true")]
+        public ActionResult<Room> getByCapacity()
+        {
+            var room = DB.Rooms.Values.Where(r => r.Capacity >= 20 && 
+                                                                r.IsActive == true && 
+                                                                r.HasProjector == true).First();
+            if (room == null)
+            {
+                return NotFound("Room was not found");
+            }
+            return Ok(room);
+
+        }
+        
+        
 
 
         // POST
@@ -55,7 +69,9 @@ namespace APBD6.Controllers
                 String.IsNullOrEmpty(room.BuildingCode.ToString()) || 
                 String.IsNullOrEmpty(room.Capacity.ToString()) || 
                 String.IsNullOrEmpty(room.Floor.ToString()) || 
-                String.IsNullOrEmpty(room.Id.ToString()) )
+                String.IsNullOrEmpty(room.Id.ToString()) || 
+                String.IsNullOrEmpty(room.HasProjector.ToString()) || 
+                String.IsNullOrEmpty(room.IsActive.ToString()))
             {
                 return BadRequest($"Attribute is required to be filled");
             }
