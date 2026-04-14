@@ -6,7 +6,7 @@ public class Room
     
     public string Name { get; set; }
     
-    public string BuildingCode { get; set; }
+    public int BuildingCode { get; set; }
     
     public int Floor { get; set; }
     
