@@ -1,113 +1,103 @@
 using APBD6.Models;
-using APBD6.Properties;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace APBD6.Controllers
+namespace APBD6.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class RoomsController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class RoomsController : ControllerBase
+    [HttpGet]
+    public ActionResult<IEnumerable<Room>> GetAll(
+        [FromQuery] int? minCapacity,
+        [FromQuery] bool? hasProjector,
+        [FromQuery] bool? activeOnly)
     {
-        
-        //GETs
-        
-        [HttpGet]
-        public ActionResult<Dictionary<int,Room>> getAllRooms()
-        {
-            return Ok(DB.Rooms);
+        IEnumerable<Room> rooms = DB.Rooms;
 
-        }
+        if (minCapacity.HasValue)
+            rooms = rooms.Where(r => r.Capacity >= minCapacity.Value);
 
-        [HttpGet("{id}")]
-        public ActionResult<Room> GetRoom(int id)
-        {
-            var room = DB.Rooms.FirstOrDefault(r=> r.Value.Id == id);
-            if (room.Value == null)
-            {
-                return NotFound("Room was not found"); 
-            }
-            return Ok(room);
-        }
-        
-        [HttpGet("buildings/{buildingCode}")]
-        public ActionResult<Room> getByBuildingCode(int buildingCode)
-        {
-            var room = DB.Rooms.Where(r =>
-                r.Value.BuildingCode == buildingCode).First();
+        if (hasProjector.HasValue)
+            rooms = rooms.Where(r => r.HasProjector == hasProjector.Value);
 
-            if (room.Value == null)
-            {
-                return NotFound("Room was not found");
-            }
-            return Ok(room);
+        if (activeOnly.HasValue && activeOnly.Value)
+            rooms = rooms.Where(r => r.IsActive);
 
-        }
+        return Ok(rooms);
+    }
 
-        [HttpGet("?minCapacity = 20 & hasProjector=true & activeOnly=true")]
-        public ActionResult<Room> getByCapacity()
-        {
-            var room = DB.Rooms.Values.Where(r => r.Capacity >= 20 && 
-                                                                r.IsActive == true && 
-                                                                r.HasProjector == true).First();
-            if (room == null)
-            {
-                return NotFound("Room was not found");
-            }
-            return Ok(room);
+    [HttpGet("{id}")]
+    public ActionResult<Room> GetById(int id)
+    {
+        var room = DB.Rooms.FirstOrDefault(r => r.Id == id);
 
-        }
-        
-        
+        if (room == null)
+            return NotFound($"Room with id {id} was not found.");
 
+        return Ok(room);
+    }
 
-        // POST
-        [HttpPost]
-        public ActionResult<Room> Create(Room room)
-        {
-            if (String.IsNullOrEmpty(room.Name) || 
-                String.IsNullOrEmpty(room.BuildingCode.ToString()) || 
-                String.IsNullOrEmpty(room.Capacity.ToString()) || 
-                String.IsNullOrEmpty(room.Floor.ToString()) || 
-                String.IsNullOrEmpty(room.Id.ToString()) || 
-                String.IsNullOrEmpty(room.HasProjector.ToString()) || 
-                String.IsNullOrEmpty(room.IsActive.ToString()))
-            {
-                return BadRequest($"Attribute is required to be filled");
-            }
-            if (!DB.Rooms.ContainsValue(room))
-            {
-                return BadRequest("Such room already exists");
-            }
-            DB.Rooms.Add(DB.Rooms.Last().Value.Id+1,room);
-            
-            return Ok("Room was added");
-        }
-        
-        //PUT
-        [HttpPut("{id}")]
-        public ActionResult<Room> Update(int id, Room room)
-        {
-            if (!DB.Rooms.Any(r => r.Value.Id == id))
-            {
-                return NotFound("Room was not found");
-            }
-            DB.Rooms[id] =  room;
-            return Ok("Room was updated");
-            
-        }
-        
-        //DELETE
-        [HttpDelete("{id}")]
-        public ActionResult<Room> Delete(int id)
-        {
-            if (!DB.Rooms.Any(r => r.Value.Id == id))
-            {
-                return NotFound("Room was not found");
-            }
+    [HttpGet("building/{buildingCode}")]
+    public ActionResult<IEnumerable<Room>> GetByBuildingCode(string buildingCode)
+    {
+        var rooms = DB.Rooms
+            .Where(r => r.BuildingCode.Equals(buildingCode, StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
-            DB.Rooms.Remove(DB.Rooms.First(r => r.Value.Id == id).Key);
-            return Ok("Room was deleted");
-        }
+        if (!rooms.Any())
+            return NotFound($"No rooms found for building code '{buildingCode}'.");
+
+        return Ok(rooms);
+    }
+
+    [HttpPost]
+    public ActionResult<Room> Create([FromBody] Room room)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        room.Id = DB.Rooms.Any() ? DB.Rooms.Max(r => r.Id) + 1 : 1;
+        DB.Rooms.Add(room);
+
+        return CreatedAtAction(nameof(GetById), new { id = room.Id }, room);
+    }
+
+    [HttpPut("{id}")]
+    public ActionResult<Room> Update(int id, [FromBody] Room updatedRoom)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var existingRoom = DB.Rooms.FirstOrDefault(r => r.Id == id);
+
+        if (existingRoom == null)
+            return NotFound($"Room with id {id} was not found.");
+
+        existingRoom.Name = updatedRoom.Name;
+        existingRoom.BuildingCode = updatedRoom.BuildingCode;
+        existingRoom.Floor = updatedRoom.Floor;
+        existingRoom.Capacity = updatedRoom.Capacity;
+        existingRoom.HasProjector = updatedRoom.HasProjector;
+        existingRoom.IsActive = updatedRoom.IsActive;
+
+        return Ok(existingRoom);
+    }
+
+    [HttpDelete("{id}")]
+    public IActionResult Delete(int id)
+    {
+        var room = DB.Rooms.FirstOrDefault(r => r.Id == id);
+
+        if (room == null)
+            return NotFound($"Room with id {id} was not found.");
+
+        var hasRelatedReservations = DB.Reservations.Any(r => r.RoomId == id);
+
+        if (hasRelatedReservations)
+            return Conflict("Cannot delete room with related reservations.");
+
+        DB.Rooms.Remove(room);
+        return NoContent();
     }
 }
